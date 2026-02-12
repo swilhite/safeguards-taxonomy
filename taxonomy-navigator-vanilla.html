@@ -97,6 +97,16 @@
             box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
         }
         
+        .search-results-count {
+            position: absolute;
+            right: 0.75rem;
+            top: 0.625rem;
+            font-size: 0.75rem;
+            color: #6b7280;
+            background: white;
+            padding: 0 0.25rem;
+        }
+        
         .main-content {
             display: flex;
             flex: 1;
@@ -374,6 +384,7 @@
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                 </svg>
                 <input type="text" class="search-input" placeholder="Search taxonomy (labels, definitions, tags, IDs)..." id="searchInput">
+                <span class="search-results-count" id="searchResultsCount"></span>
             </div>
         </div>
         <div class="main-content">
@@ -423,6 +434,16 @@
             );
         }
 
+        // Check if node or any descendant matches search
+        function nodeOrDescendantMatches(node, term) {
+            if (!term) return true;
+            if (matchesSearch(node, term)) return true;
+            if (node.children) {
+                return node.children.some(child => nodeOrDescendantMatches(child, term));
+            }
+            return false;
+        }
+
         // Get sensitivity class
         function getSensitivityClass(level) {
             if (level === 'Low') return 'sensitivity-low';
@@ -438,7 +459,8 @@
             const isSelected = selectedNode && selectedNode.id === node.id;
             const matches = matchesSearch(node, searchTerm);
 
-            if (searchTerm && !matches) return '';
+            // In search mode, only show nodes that match or have matching descendants
+            if (searchTerm && !nodeOrDescendantMatches(node, searchTerm)) return '';
 
             let html = '<div class="tree-node-wrapper">';
             
@@ -447,9 +469,15 @@
                           style="padding-left: ${level * 24 + 12}px">`;
             html += '<div class="node-content">';
             
+            // Determine if we should show children (for chevron display)
+            const shouldShowChildren = hasChildren && (
+                (searchTerm && nodeOrDescendantMatches(node, searchTerm)) || 
+                (!searchTerm && isExpanded)
+            );
+            
             if (hasChildren) {
                 html += `<div class="chevron" data-toggle="${node.id}">`;
-                if (isExpanded) {
+                if (shouldShowChildren) {
                     html += '<svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" /></svg>';
                 } else {
                     html += '<svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" /></svg>';
@@ -467,7 +495,7 @@
             html += `<span class="sensitivity-badge ${getSensitivityClass(node.sensitivity_level)}">${node.sensitivity_level}</span>`;
             html += '</div></div>';
             
-            if (isExpanded && hasChildren) {
+            if (shouldShowChildren) {
                 node.children.forEach(child => {
                     html += renderTreeNode(child, level + 1);
                 });
@@ -599,6 +627,7 @@
         function render() {
             const treePanel = document.getElementById('treePanel');
             const detailPanel = document.getElementById('detailPanel');
+            const searchResultsCount = document.getElementById('searchResultsCount');
 
             if (viewMode === 'tree') {
                 treePanel.innerHTML = renderTreeNode(taxonomyData.root);
@@ -607,6 +636,16 @@
             }
 
             detailPanel.innerHTML = renderDetailPanel(selectedNode);
+
+            // Update search results count
+            if (searchTerm) {
+                const matchCount = Object.values(nodeIndex).filter(node => 
+                    matchesSearch(node, searchTerm)
+                ).length;
+                searchResultsCount.textContent = `${matchCount} result${matchCount !== 1 ? 's' : ''}`;
+            } else {
+                searchResultsCount.textContent = '';
+            }
 
             // Attach event listeners
             attachEventListeners();
